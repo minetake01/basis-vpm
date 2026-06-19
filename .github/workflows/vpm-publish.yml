@@ -1,7 +1,7 @@
 name: VPM Publish
 
 # Triggered automatically by the Basis "Publish Minetake VPM" workflow.
-# Version and release timing are decided in the Basis monorepo (package.json).
+# Version, prerelease, and release timing are decided in the Basis monorepo.
 
 on:
   repository_dispatch:
@@ -35,39 +35,81 @@ jobs:
         id: params
         env:
           PACKAGE: ${{ github.event.client_payload.package }}
-          VERSION: ${{ github.event.client_payload.version }}
+          BASE_VERSION: ${{ github.event.client_payload.base_version }}
+          PUBLISH_VERSION: ${{ github.event.client_payload.publish_version }}
+          DISPLAY_NAME: ${{ github.event.client_payload.display_name }}
           TAG: ${{ github.event.client_payload.tag }}
+          RELEASE_NAME: ${{ github.event.client_payload.release_name }}
+          PRERELEASE: ${{ github.event.client_payload.prerelease }}
           BRANCH: ${{ github.event.client_payload.source_branch }}
         run: |
           set -euo pipefail
-          if [ -z "$PACKAGE" ] || [ -z "$VERSION" ]; then
-            echo "::error::repository_dispatch payload must include package and version"
+          if [ -z "$PACKAGE" ] || [ -z "$PUBLISH_VERSION" ] || [ -z "$BASE_VERSION" ]; then
+            echo "::error::repository_dispatch payload must include package, base_version, and publish_version"
+            exit 1
+          fi
+          if [ -z "$DISPLAY_NAME" ]; then
+            echo "::error::repository_dispatch payload must include display_name"
             exit 1
           fi
           if [ -z "$TAG" ]; then
-            TAG="v${VERSION}"
+            echo "::error::repository_dispatch payload must include tag"
+            exit 1
+          fi
+          if [ -z "$RELEASE_NAME" ]; then
+            RELEASE_NAME="${DISPLAY_NAME} ${PUBLISH_VERSION}"
           fi
           MANIFEST=".github/vpm-packages.txt"
           if ! grep -qxF "$PACKAGE" "$MANIFEST"; then
             echo "::error::${PACKAGE} is not listed in ${MANIFEST}"
             exit 1
           fi
-          if [ ! -f "Packages/${PACKAGE}/package.json" ]; then
-            echo "::error::Packages/${PACKAGE}/package.json not found"
+          PKG_JSON="Packages/${PACKAGE}/package.json"
+          if [ ! -f "$PKG_JSON" ]; then
+            echo "::error::${PKG_JSON} not found — run Publish Minetake VPM from Basis first"
             exit 1
           fi
-          HUB_VERSION="$(python3 -c "import json; print(json.load(open('Packages/${PACKAGE}/package.json'))['version'])")"
-          if [ "$HUB_VERSION" != "$VERSION" ]; then
-            echo "::error::hub package.json version (${HUB_VERSION}) != dispatch version (${VERSION})"
+          HUB_VERSION="$(python3 -c "import json; print(json.load(open('${PKG_JSON}', encoding='utf-8-sig'))['version'])")"
+          if [ "$HUB_VERSION" != "$BASE_VERSION" ] && [ "$HUB_VERSION" != "$PUBLISH_VERSION" ]; then
+            echo "::error::hub package.json version (${HUB_VERSION}) does not match previous (${BASE_VERSION}) or publish (${PUBLISH_VERSION})"
             exit 1
           fi
           {
             echo "package=$PACKAGE"
-            echo "version=$VERSION"
+            echo "base_version=$BASE_VERSION"
+            echo "publish_version=$PUBLISH_VERSION"
+            echo "display_name=$DISPLAY_NAME"
             echo "tag=$TAG"
+            echo "release_name=$RELEASE_NAME"
+            echo "prerelease=${PRERELEASE:-false}"
             echo "list=$PACKAGE"
           } >> "$GITHUB_OUTPUT"
-          echo "Publishing \`${PACKAGE}@${VERSION}\` (tag \`${TAG}\`, from Basis branch \`${BRANCH}\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Publishing \`${PACKAGE}@${PUBLISH_VERSION}\` (tag \`${TAG}\`, from Basis branch \`${BRANCH}\`)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update hub package.json
+        env:
+          PACKAGE: ${{ steps.params.outputs.package }}
+          PUBLISH_VERSION: ${{ steps.params.outputs.publish_version }}
+        run: |
+          python3 .github/scripts/publish_helpers.py set-version \
+            "Packages/${PACKAGE}/package.json" \
+            "${PUBLISH_VERSION}"
+
+      - name: Commit package.json on main
+        env:
+          PACKAGE: ${{ steps.params.outputs.package }}
+          PUBLISH_VERSION: ${{ steps.params.outputs.publish_version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "Packages/${PACKAGE}/package.json"
+          if git diff --staged --quiet; then
+            echo "package.json already at ${PUBLISH_VERSION}"
+          else
+            git commit -m "publish: ${PACKAGE}@${PUBLISH_VERSION}"
+            git push
+          fi
 
       - name: Stage previous index
         id: stage
@@ -124,7 +166,7 @@ jobs:
             } > release-body.md
             cat release-body.md >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "::error::version ${{ steps.params.outputs.version }} is already in the VPM index — bump version in Basis package.json"
+            echo "::error::version ${{ steps.params.outputs.publish_version }} is already in the VPM index — bump version in Basis package.json or use prerelease"
             exit 1
           fi
 
@@ -133,9 +175,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.params.outputs.tag }}
-          name: ${{ steps.params.outputs.package }} ${{ steps.params.outputs.version }}
+          name: ${{ steps.params.outputs.release_name }}
           body_path: release-body.md
-          prerelease: false
+          prerelease: ${{ steps.params.outputs.prerelease == 'true' }}
           files: out/artifacts/*.zip
           fail_on_unmatched_files: true
 

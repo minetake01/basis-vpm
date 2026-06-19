@@ -15,12 +15,14 @@ Publishing is controlled entirely from the **Basis** monorepo. This repository r
 ### Release a package (Basis repo only)
 
 1. Work on a per-package branch (e.g. `feat/transparent-mirror`).
-2. Bump `version` in `Packages/<package>/package.json` — this is the **only** version edit point.
-3. Push the branch.
-4. In the **Basis** repository → Actions → **Publish Minetake VPM** → Run workflow:
+2. In the **Basis** repository → Actions → **Publish Minetake VPM** → Run workflow:
    - **Package**: select from dropdown
-   - **Source branch**: `(workflow branch)` to use the branch selected in the Run workflow dropdown, or pick a named branch to override
-5. The workflow syncs files here and triggers VPM publish automatically.
+   - **Source branch**: `(workflow branch)` or a named branch override
+   - **Bump type**: `major` / `minor` / `patch` / `prerelease`
+   - **Prerelease identifier** (only for `prerelease`): e.g. `rc`, `beta` — leave empty for `dev.<year>.W<week>.<run>`
+3. The workflow bumps `package.json` on the source branch, syncs to this repo, and triggers **VPM Publish**.
+
+Release tags use `displayName`, for example `Transparent-Mirror-v1.0.1` or `Transparent-Mirror-v1.0.0-rc.1`.
 
 ### Adding a new package
 

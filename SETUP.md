@@ -42,21 +42,23 @@ curl -sI https://basis.minetake.net/vpm-repo.json
 
 ## 4. First release (Basis repo only)
 
-1. Bump `version` in `Basis/Packages/net.minetake.basis.transparent-mirror/package.json` (e.g. `1.0.0`).
-2. Push your package branch.
-3. **Basis** repo → Actions → **Publish Minetake VPM**:
+1. Push your package branch (initial `version` in `package.json` is the bump baseline).
+2. **Basis** repo → Actions → **Publish Minetake VPM**:
 
-| Input | Value |
+| Input | Example |
 |---|---|
 | `package` | `net.minetake.basis.transparent-mirror` |
-| `source_branch` | `(workflow branch)` — select your package branch in the Run workflow dropdown |
+| `source_branch` | `(workflow branch)` |
+| `bump_type` | `patch` (first publish from `1.0.0` → `1.0.1`) or `prerelease` |
+| `prerelease_identifier` | empty → `dev.<year>.W<week>.<run>`; or `rc` → `1.0.0-rc.1` |
 
-The workflow syncs to basis-vpm and automatically triggers VPM publish.
+The workflow bumps `package.json`, commits to the source branch, syncs to basis-vpm, and triggers VPM publish.
 
 ### Verify
 
 - **basis-vpm** Actions → **VPM Publish** completed successfully
 - Release asset: `net.minetake.basis.transparent-mirror-1.0.0.zip`
+- Release tag/title include **Transparent Mirror** (from `displayName`), e.g. `Transparent-Mirror-v1.0.0`
 - `vpm` branch contains `vpm-repo.json` and `CNAME`
 - `https://basis.minetake.net/vpm-repo.json` lists the package at version `1.0.0`
 
