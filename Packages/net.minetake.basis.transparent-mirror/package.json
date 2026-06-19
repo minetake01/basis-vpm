@@ -5,11 +5,11 @@
   "description": "VRChat-style world mirror prop with Off / Full / Transparent modes cycled by a single local interactable button.",
   "author": {
     "name": "minetake",
-    "url": "https://github.com/minetake"
+    "url": "https://github.com/minetake01"
   },
   "license": "MIT",
   "url": "https://basis.minetake.net/",
-  "documentationUrl": "https://github.com/minetake/basis-vpm/tree/main/Packages/net.minetake.basis.transparent-mirror",
+  "documentationUrl": "https://github.com/minetake01/basis-vpm/tree/main/Packages/net.minetake.basis.transparent-mirror",
   "dependencies": {
     "com.unity.render-pipelines.universal": "17.4.0"
   },
