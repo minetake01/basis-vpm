@@ -1,0 +1,6 @@
+# Folders under Packages/ to publish as VPM packages.
+# One folder name per line. Lines starting with '#' and blank lines are ignored.
+# Consumed by .github/scripts/vpmpackagegen.py.
+# Add entries manually before first sync/publish of a new package.
+
+net.minetake.basis.transparent-mirror
