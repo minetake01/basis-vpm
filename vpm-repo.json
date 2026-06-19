@@ -29,30 +29,6 @@
             "com.cnlohr.cilbox": "0.1.0"
           },
           "zipSHA256": "3c4fc119a37cea33c22ae830ed4ccb60ad391d4d5cc867f78f1aefb382853ad0"
-        },
-        "1.0.0": {
-          "name": "net.minetake.basis.transparent-mirror",
-          "displayName": "Transparent Mirror",
-          "version": "1.0.0",
-          "description": "VRChat-style world mirror prop with Off / Full / Transparent modes cycled by a single local interactable button.",
-          "author": {
-            "name": "minetake",
-            "url": "https://github.com/minetake01"
-          },
-          "license": "CC0-1.0",
-          "url": "https://github.com/minetake01/basis-vpm/releases/download/v1.0.0/net.minetake.basis.transparent-mirror-1.0.0.zip",
-          "documentationUrl": "https://github.com/minetake01/basis-vpm/tree/main/Packages/net.minetake.basis.transparent-mirror",
-          "dependencies": {
-            "com.unity.render-pipelines.universal": "17.4.0"
-          },
-          "vpmDependencies": {
-            "com.basis.framework": "0.0.1",
-            "com.basis.sdk": "0.0.1",
-            "com.basis.examples": "0.0.1",
-            "com.basis.shim": "0.0.1",
-            "com.cnlohr.cilbox": "0.1.0"
-          },
-          "zipSHA256": "935280cf189ae031f41cb825d2c9d15c38bf22d8f2bf2e6b76cce2cb870df26a"
         }
       }
     }
