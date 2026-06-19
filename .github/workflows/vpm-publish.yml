@@ -1,21 +1,11 @@
 name: VPM Publish
 
+# Triggered automatically by the Basis "Publish Minetake VPM" workflow.
+# Version and release timing are decided in the Basis monorepo (package.json).
+
 on:
-  workflow_dispatch:
-    inputs:
-      packages:
-        description: >-
-          Package folder names to publish (comma or newline separated).
-          Example: net.minetake.basis.transparent-mirror
-        required: true
-        type: string
-      tag_override:
-        description: 'Release tag (e.g. v1.0.0). Required when stable=true.'
-        required: false
-      stable:
-        description: 'Stable release — use package.json versions as-is, no dev suffix.'
-        type: boolean
-        default: true
+  repository_dispatch:
+    types: [vpm-publish]
 
 concurrency:
   group: vpm-publish
@@ -41,55 +31,43 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Validate packages input
-        id: pkgs
+      - name: Resolve publish parameters
+        id: params
         env:
-          PACKAGES_INPUT: ${{ inputs.packages }}
+          PACKAGE: ${{ github.event.client_payload.package }}
+          VERSION: ${{ github.event.client_payload.version }}
+          TAG: ${{ github.event.client_payload.tag }}
+          BRANCH: ${{ github.event.client_payload.source_branch }}
         run: |
           set -euo pipefail
-          # Normalize comma/newline separated list to comma-separated for vpmpackagegen.
-          NORMALIZED="$(printf '%s' "$PACKAGES_INPUT" | tr ',\n' '  ' | xargs | tr ' ' ',')"
-          if [ -z "$NORMALIZED" ]; then
-            echo "::error::packages input is empty"
+          if [ -z "$PACKAGE" ] || [ -z "$VERSION" ]; then
+            echo "::error::repository_dispatch payload must include package and version"
             exit 1
           fi
+          if [ -z "$TAG" ]; then
+            TAG="v${VERSION}"
+          fi
           MANIFEST=".github/vpm-packages.txt"
-          while IFS= read -r pkg; do
-            if ! grep -qxF "$pkg" "$MANIFEST"; then
-              echo "::error::${pkg} is not listed in ${MANIFEST}"
-              exit 1
-            fi
-            if [ ! -f "Packages/${pkg}/package.json" ]; then
-              echo "::error::Packages/${pkg}/package.json not found — run Sync from Basis first"
-              exit 1
-            fi
-          done < <(printf '%s' "$NORMALIZED" | tr ',' '\n')
-          echo "list=$NORMALIZED" >> "$GITHUB_OUTPUT"
-
-      - name: Compute tag and dev suffix
-        id: meta
-        env:
-          TAG_OVERRIDE: ${{ inputs.tag_override }}
-          RUN_NUMBER: ${{ github.run_number }}
-          STABLE: ${{ inputs.stable }}
-        run: |
-          set -euo pipefail
-          if [ "${STABLE:-false}" = "true" ]; then
-            if [ -z "${TAG_OVERRIDE}" ]; then
-              echo "::error::stable=true requires tag_override (e.g. v1.0.0)"
-              exit 1
-            fi
-            TAG="${TAG_OVERRIDE}"
-            SUFFIX=""
-          else
-            TAG="${TAG_OVERRIDE:-vpm-$(date -u +%G-W%V).${RUN_NUMBER}}"
-            SUFFIX="dev.$(date -u +%G.W%V).${RUN_NUMBER}"
+          if ! grep -qxF "$PACKAGE" "$MANIFEST"; then
+            echo "::error::${PACKAGE} is not listed in ${MANIFEST}"
+            exit 1
+          fi
+          if [ ! -f "Packages/${PACKAGE}/package.json" ]; then
+            echo "::error::Packages/${PACKAGE}/package.json not found"
+            exit 1
+          fi
+          HUB_VERSION="$(python3 -c "import json; print(json.load(open('Packages/${PACKAGE}/package.json'))['version'])")"
+          if [ "$HUB_VERSION" != "$VERSION" ]; then
+            echo "::error::hub package.json version (${HUB_VERSION}) != dispatch version (${VERSION})"
+            exit 1
           fi
           {
+            echo "package=$PACKAGE"
+            echo "version=$VERSION"
             echo "tag=$TAG"
-            echo "suffix=$SUFFIX"
-            echo "stable=${STABLE:-false}"
+            echo "list=$PACKAGE"
           } >> "$GITHUB_OUTPUT"
+          echo "Publishing \`${PACKAGE}@${VERSION}\` (tag \`${TAG}\`, from Basis branch \`${BRANCH}\`)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Stage previous index
         id: stage
@@ -111,11 +89,9 @@ jobs:
 
       - name: Build packages
         env:
-          DEV_SUFFIX: ${{ steps.meta.outputs.suffix }}
-          PACKAGE_LIST: ${{ steps.pkgs.outputs.list }}
+          PACKAGE_LIST: ${{ steps.params.outputs.list }}
         run: |
           python3 .github/scripts/vpmpackagegen.py build \
-            --dev-suffix "$DEV_SUFFIX" \
             --packages "$PACKAGE_LIST" \
             --out out
 
@@ -124,8 +100,7 @@ jobs:
         env:
           REPO: ${{ github.repository }}
           SERVER_URL: ${{ github.server_url }}
-          TAG: ${{ steps.meta.outputs.tag }}
-          STABLE: ${{ steps.meta.outputs.stable }}
+          TAG: ${{ steps.params.outputs.tag }}
         run: |
           set -euo pipefail
           BASE_URL="${SERVER_URL}/${REPO}/releases/download/${TAG}"
@@ -149,22 +124,18 @@ jobs:
             } > release-body.md
             cat release-body.md >> "$GITHUB_STEP_SUMMARY"
           else
-            if [ "${STABLE}" = "true" ]; then
-              echo "::error::stable=true but no new package versions were added — bump version in package.json."
-              exit 1
-            fi
-            echo "Re-run with no new versions; release and push will be skipped."
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "::error::version ${{ steps.params.outputs.version }} is already in the VPM index — bump version in Basis package.json"
+            exit 1
           fi
 
       - name: Create release and upload zips
         if: steps.index.outputs.has_changes == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: VPM ${{ steps.meta.outputs.tag }}
+          tag_name: ${{ steps.params.outputs.tag }}
+          name: ${{ steps.params.outputs.package }} ${{ steps.params.outputs.version }}
           body_path: release-body.md
-          prerelease: ${{ steps.meta.outputs.stable != 'true' }}
+          prerelease: false
           files: out/artifacts/*.zip
           fail_on_unmatched_files: true
 
@@ -173,7 +144,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          TAG: ${{ steps.meta.outputs.tag }}
+          TAG: ${{ steps.params.outputs.tag }}
           FIRST_RUN: ${{ steps.stage.outputs.first_run }}
         run: |
           set -euo pipefail
